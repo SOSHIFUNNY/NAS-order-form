@@ -127,9 +127,7 @@
       min-height: 44px;
     }
 
-    input:hover, select:hover {
-      border-color: oklch(75% 0.04 230);
-    }
+    input:hover, select:hover { border-color: oklch(75% 0.04 230); }
 
     input:focus-visible, select:focus-visible {
       outline: 2px solid var(--clr-primary-lt);
@@ -137,9 +135,7 @@
       border-color: var(--clr-primary-lt);
     }
 
-    input.error, select.error {
-      border-color: var(--clr-error);
-    }
+    input.error, select.error { border-color: var(--clr-error); }
 
     .field-error {
       font-size: 0.78rem;
@@ -285,7 +281,12 @@
 </div>
 
 <script>
-  const PROXY_URL = 'https://nas-sms-proxy.sosho85a.workers.dev';
+  // ─── Config ───────────────────────────────────────────────────────────────
+  // توکن PAT با دسترسی محدود (فقط Actions: write روی همین ریپو)
+  // این توکن در سورس‌کد مرورگر قابل مشاهده است؛ از PAT با scope بسیار محدود استفاده کنید
+  const GH_PAT  = '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';   // ← مقدار واقعی GH_PAT را اینجا بگذارید
+  const GH_REPO = 'soshifunny/NAS-order-form';
+  const DISPATCH_URL = `https://api.github.com/repos/${GH_REPO}/dispatches`;
 
   // ─── Validation rules ────────────────────────────────────────────────────
   const rules = {
@@ -302,10 +303,10 @@
   function validateField(id) {
     const rule = rules[id];
     if (!rule) return true;
-    const el   = document.getElementById(id);
-    const err  = document.getElementById(id + '-err');
-    const val  = el.value.trim();
-    let msg    = '';
+    const el  = document.getElementById(id);
+    const err = document.getElementById(id + '-err');
+    const val = el.value.trim();
+    let msg   = '';
 
     if (rule.required && !val) {
       msg = `${rule.label} الزامی است.`;
@@ -351,7 +352,7 @@
   document.getElementById('orderForm').addEventListener('submit', async function (e) {
     e.preventDefault();
 
-    // Validate all required fields
+    // اعتبارسنجی همه فیلدها
     const valid = Object.keys(rules).map(validateField).every(Boolean);
     if (!valid) {
       showStatus('error', 'لطفاً خطاهای فرم را برطرف کنید.');
@@ -362,26 +363,49 @@
     btn.disabled = true;
     btn.textContent = 'در حال ارسال…';
 
-    const data = Object.fromEntries(new FormData(this));
+    const data    = Object.fromEntries(new FormData(this));
     const message = buildMessage(data);
 
     try {
-      const response = await fetch(PROXY_URL, {
+      const response = await fetch(DISPATCH_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        headers: {
+          'Accept':        'application/vnd.github+json',
+          'Authorization': `Bearer ${GH_PAT}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({
+          event_type:     'new-order',
+          client_payload: { message },
+        }),
       });
 
-      let result;
-      try { result = await response.json(); } catch { result = {}; }
-
-      if (!response.ok) {
-        const detail = result?.error || result?.message || `کد خطا: ${response.status}`;
+      // GitHub dispatch روی موفقیت 204 No Content برمی‌گرداند
+      if (response.status === 204 || response.ok) {
+        showStatus('success', '✅ درخواست شما با موفقیت ارسال شد. کارشناسان ما به زودی تماس می‌گیرند.');
+        this.reset();
+        Object.keys(rules).forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.classList.remove('error');
+        });
+      } else {
+        let detail = `کد خطا: ${response.status}`;
+        try {
+          const result = await response.json();
+          detail = result?.message || detail;
+        } catch { /* ignore */ }
         throw new Error(detail);
       }
 
-      showStatus('success', '✅ درخواست شما با موفقیت ارسال شد. کارشناسان ما به زودی تماس می‌گیرند.');
-      this.reset();
-      Object.keys(rules).forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.remove('error');
+    } catch (err) {
+      showStatus('error', `❌ خطا در ارسال: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'ارسال درخواست';
+    }
+  });
+</script>
+</body>
+</html>
+
