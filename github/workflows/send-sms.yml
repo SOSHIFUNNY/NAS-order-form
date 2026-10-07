@@ -1,0 +1,39 @@
+name: Send Order SMS
+
+on:
+  repository_dispatch:
+    types: [new-order]
+
+jobs:
+  send-sms:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse and send SMS
+        env:
+          KAVENEGAR_KEY: ${{ secrets.KAVENEGAR_KEY }}
+        run: |
+          PAYLOAD='${{ toJson(github.event.client_payload) }}'
+
+          NAME=$(echo "$PAYLOAD"    | jq -r '.name    // "نامشخص"')
+          PHONE=$(echo "$PAYLOAD"   | jq -r '.phone   // "نامشخص"')
+          COMPANY=$(echo "$PAYLOAD" | jq -r '.company // "-"')
+          TYPE=$(echo "$PAYLOAD"    | jq -r '.type    // "-"')
+          FLOW=$(echo "$PAYLOAD"    | jq -r '.flow    // "-"')
+          COD=$(echo "$PAYLOAD"     | jq -r '.cod     // "-"')
+          BOD=$(echo "$PAYLOAD"     | jq -r '.bod     // "-"')
+          TSS=$(echo "$PAYLOAD"     | jq -r '.tss     // "-"')
+          OIL=$(echo "$PAYLOAD"     | jq -r '.oil     // "-"')
+
+          MESSAGE="سفارش جدید NAS
+          نام: $NAME
+          تلفن: $PHONE
+          شرکت: $COMPANY
+          نوع: $TYPE
+          دبی: $FLOW m3/d
+          COD: $COD | BOD: $BOD | TSS: $TSS | Oil: $OIL mg/L"
+
+          curl -s -X POST \
+            "https://api.kavenegar.com/v1/${KAVENEGAR_KEY}/sms/send.json" \
+            --data-urlencode "sender=10004346" \
+            --data-urlencode "receptor=09015055890" \
+            --data-urlencode "message=${MESSAGE}"
